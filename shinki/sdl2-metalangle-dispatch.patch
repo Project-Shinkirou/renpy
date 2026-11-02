@@ -1,0 +1,78 @@
+diff --git a/src/render/opengles/SDL_render_gles.c b/src/render/opengles/SDL_render_gles.c
+--- a/src/render/opengles/SDL_render_gles.c
++++ b/src/render/opengles/SDL_render_gles.c
+@@ -148,7 +148,7 @@
+ 
+ static int GLES_LoadFunctions(GLES_RenderData * data)
+ {
+-#if SDL_VIDEO_DRIVER_UIKIT
++#if SDL_VIDEO_DRIVER_UIKIT && !defined(METALANGLE)
+ #define __SDL_NOGETPROCADDR__
+ #elif SDL_VIDEO_DRIVER_ANDROID
+ #define __SDL_NOGETPROCADDR__
+diff --git a/src/render/opengles2/SDL_render_gles2.c b/src/render/opengles2/SDL_render_gles2.c
+--- a/src/render/opengles2/SDL_render_gles2.c
++++ b/src/render/opengles2/SDL_render_gles2.c
+@@ -229,7 +229,7 @@
+ 
+ static int GLES2_LoadFunctions(GLES2_RenderData * data)
+ {
+-#if SDL_VIDEO_DRIVER_UIKIT
++#if SDL_VIDEO_DRIVER_UIKIT && !defined(METALANGLE)
+ #define __SDL_NOGETPROCADDR__
+ #elif SDL_VIDEO_DRIVER_ANDROID
+ #define __SDL_NOGETPROCADDR__
+diff --git a/src/video/uikit/SDL_uikitopengles.m b/src/video/uikit/SDL_uikitopengles.m
+--- a/src/video/uikit/SDL_uikitopengles.m
++++ b/src/video/uikit/SDL_uikitopengles.m
+@@ -35,2 +35,3 @@
+ #include <dlfcn.h>
++#include <dispatch/dispatch.h>
+ 
+@@ -59,10 +60,25 @@
+ void *
+ UIKit_GL_GetProcAddress(_THIS, const char *proc)
+ {
++#ifdef METALANGLE
++    static void *metalangle;
++    static dispatch_once_t once;
++    dispatch_once(&once, ^{
++        NSBundle *bundle = [NSBundle bundleForClass:[MGLContext class]];
++        metalangle = dlopen(bundle.executablePath.fileSystemRepresentation,
++                           RTLD_LAZY | RTLD_LOCAL);
++    });
++    if (!metalangle) {
++        SDL_SetError("Could not open MetalANGLE: %s", dlerror());
++        return NULL;
++    }
++    return dlsym(metalangle, proc);
++#else
+     /* Look through all SO's for the proc symbol.  Here's why:
+      * -Looking for the path to the OpenGL Library seems not to work in the iOS Simulator.
+      * -We don't know that the path won't change in the future. */
+     return dlsym(RTLD_DEFAULT, proc);
++#endif
+ }
+ 
+ /*
+diff --git a/src/video/uikit/SDL_uikitopenglview.m b/src/video/uikit/SDL_uikitopenglview.m
+--- a/src/video/uikit/SDL_uikitopenglview.m
++++ b/src/video/uikit/SDL_uikitopenglview.m
+@@ -127,7 +127,17 @@
+ 
+         if (samples > 0) {
+             GLint maxsamples = 0;
++#ifdef METALANGLE
++            void (*get_integer)(GLenum, GLint *) =
++                (void (*)(GLenum, GLint *)) SDL_GL_GetProcAddress("glGetIntegerv");
++            if (!get_integer) {
++                SDL_SetError("Could not load MetalANGLE glGetIntegerv");
++                return nil;
++            }
++            get_integer(GL_MAX_SAMPLES, &maxsamples);
++#else
+             glGetIntegerv(GL_MAX_SAMPLES, &maxsamples);
++#endif
+ #ifndef METALANGLE
+ 
+ #endif

@@ -32,11 +32,13 @@ def run(*args, **kwargs):
     subprocess.run(args, check=True, **kwargs)
 
 sdk_path = capture("xcrun", "--sdk", sdk_name, "--show-sdk-path")
+sdl_dispatch_patch = pathlib.Path(__file__).with_name("sdl2-metalangle-dispatch.patch")
 identity = {
     "target": target,
     "renios_sha256": "c4fae153e8276ed0faed5e84ea3e0b7c4bf337f0e3208e9130c6a41748a83b2b",
     "recipe": "7bfab40c1174f622f644b24669afd5fb167fbb79",
     "script": hashlib.sha256(pathlib.Path(__file__).read_bytes()).hexdigest(),
+    "sdl_dispatch": hashlib.sha256(sdl_dispatch_patch.read_bytes()).hexdigest(),
     "xcode": capture("xcodebuild", "-version"),
     "sdk": sdk_path,
 }
@@ -104,6 +106,7 @@ with tempfile.TemporaryDirectory(prefix="renpy-ios-", dir=output.parent) as temp
         patch = line.partition("#")[0].strip()
         if patch:
             run("patch", "-p1", "-i", str(patches / patch), cwd=sdl)
+    run("patch", "-p1", "-i", str(sdl_dispatch_patch), cwd=sdl)
     # SDL2 and SDL3 both define UIKit classes. Rebuild SDL2 with private
     # Objective-C class names; renaming Mach-O symbols alone cannot isolate them.
     classes = set()
@@ -150,7 +153,9 @@ with tempfile.TemporaryDirectory(prefix="renpy-ios-", dir=output.parent) as temp
     nm, objcopy = llvm / "llvm-nm", llvm / "llvm-objcopy"
     if not nm.is_file() or not objcopy.is_file():
         raise RuntimeError("Ren'Py iOS isolation requires rustup component add llvm-tools-preview")
-    native_inputs = sorted(libraries.glob("*.a")) + [framework / "ShinkiRenpyMetalANGLE"]
+    # Only static definitions need a private linker namespace. Rewriting a
+    # dylib symbol table does not rewrite its dyld exports or binding metadata.
+    native_inputs = sorted(libraries.glob("*.a"))
     symbols = set()
     for native in native_inputs:
         for line in capture(str(nm), "-g", "--defined-only", "--format=posix", str(native)).splitlines():
@@ -173,7 +178,7 @@ with tempfile.TemporaryDirectory(prefix="renpy-ios-", dir=output.parent) as temp
         str(framework / "ShinkiRenpyMetalANGLE"))
     pc = libraries / "pkgconfig/shinki-renpy-runtime.pc"
     pc.parent.mkdir()
-    frameworks = "UIKit Foundation CoreGraphics AudioToolbox QuartzCore ImageIO CoreServices GameController CoreMotion Security SystemConfiguration AVFoundation CoreMedia CoreVideo VideoToolbox"
+    frameworks = "UIKit Foundation CoreGraphics AudioToolbox QuartzCore ImageIO CoreServices GameController CoreHaptics CoreMotion Security SystemConfiguration AVFoundation CoreMedia CoreVideo VideoToolbox OpenGLES"
     pc.write_text("Name: shinki-renpy-runtime\nDescription: Official Renios system closure\nVersion: 8.5.3\nLibs: -lc++ -lz -liconv "
         + " ".join("-framework " + name for name in frameworks.split())
         + " -F" + shlex.quote(str(output / "Resources/Frameworks")) + " -framework ShinkiRenpyMetalANGLE\n")

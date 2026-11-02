@@ -51,10 +51,13 @@ target compiler, and stages the matching MetalANGLE framework. The
 upstream always-true OS-version shim and app entrypoint archives are not
 linked. The host bundles MetalANGLE under its standard ``Frameworks``
 directory and signs the resulting application.
-Native archives and the private framework use a generated symbol namespace,
-keeping Ren'Py's FFmpeg/SDL ABI separate from other embedded cores. SDL2 is
-rebuilt from its pinned source with private Objective-C class names; Mach-O
-symbol rewriting alone does not isolate UIKit runtime classes.
+Native static archives use a generated symbol namespace, keeping Ren'Py's
+FFmpeg/SDL ABI separate from other embedded cores. The private MetalANGLE
+framework retains its real dyld exports and Objective-C identity; SDL resolves
+its GL procedures from that exact loaded framework, not the process-wide
+OpenGLES namespace. SDL2 is rebuilt from its pinned source with private
+Objective-C class names; Mach-O symbol rewriting alone does not isolate
+UIKit runtime classes.
 Class identifiers are read as ASCII tokens from the original source bytes,
 so legacy-encoded SDL comments do not affect namespace enumeration.
 SDL's configure host tuple selects the upstream UIKit/CoreAudio iOS backend;
