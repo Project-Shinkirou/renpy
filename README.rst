@@ -51,6 +51,9 @@ target compiler, and stages the matching MetalANGLE framework. The
 upstream always-true OS-version shim and app entrypoint archives are not
 linked. The host bundles MetalANGLE under its standard ``Frameworks``
 directory and signs the resulting application.
+The staged framework retains ``@executable_path/Frameworks`` and removes the
+upstream ``@loader_path/Frameworks`` search path: no nested Frameworks directory
+is shipped. Dependency inspection and final application signing remain required.
 Native static archives use a generated symbol namespace, keeping Ren'Py's
 FFmpeg/SDL ABI separate from other embedded cores. The private MetalANGLE
 framework retains its real dyld exports and Objective-C identity; SDL resolves

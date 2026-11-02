@@ -176,6 +176,10 @@ with tempfile.TemporaryDirectory(prefix="renpy-ios-", dir=output.parent) as temp
         shutil.copy2(rewritten, native)
     run("install_name_tool", "-id", "@rpath/ShinkiRenpyMetalANGLE.framework/ShinkiRenpyMetalANGLE",
         str(framework / "ShinkiRenpyMetalANGLE"))
+    # The framework is a sibling in the app's Frameworks directory, not the
+    # parent of another Frameworks tree. Retain its executable-relative path.
+    run("install_name_tool", "-delete_rpath", "@loader_path/Frameworks",
+        str(framework / "ShinkiRenpyMetalANGLE"))
     pc = libraries / "pkgconfig/shinki-renpy-runtime.pc"
     pc.parent.mkdir()
     frameworks = "UIKit Foundation CoreGraphics AudioToolbox QuartzCore ImageIO CoreServices GameController CoreHaptics CoreMotion Security SystemConfiguration AVFoundation CoreMedia CoreVideo VideoToolbox OpenGLES"
