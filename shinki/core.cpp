@@ -127,13 +127,49 @@ void log(uint32_t level, const char *event,
 bool header(const ShinkiEmuHeader &h, size_t size) noexcept {
   return h.version == ShinkiEmuABI_VERSION && h.size >= size;
 }
+bool valid_utf8(const ShinkiEmuBytes b) noexcept {
+  const auto *bytes = reinterpret_cast<const unsigned char *>(b.data);
+  size_t i = 0;
+  while (i < b.len) {
+    const unsigned char first = bytes[i++];
+    if (first <= 0x7f) continue;
+    if (first >= 0xc2 && first <= 0xdf) {
+      if (i >= b.len || (bytes[i++] & 0xc0) != 0x80) return false;
+      continue;
+    }
+    if (first >= 0xe0 && first <= 0xef) {
+      if (i + 1 >= b.len) return false;
+      const unsigned char second = bytes[i++];
+      const unsigned char third = bytes[i++];
+      const bool second_ok =
+          first == 0xe0 ? second >= 0xa0 && second <= 0xbf
+          : first == 0xed ? second >= 0x80 && second <= 0x9f
+                          : (second & 0xc0) == 0x80;
+      if (!second_ok || (third & 0xc0) != 0x80) return false;
+      continue;
+    }
+    if (first >= 0xf0 && first <= 0xf4) {
+      if (i + 2 >= b.len) return false;
+      const unsigned char second = bytes[i++];
+      const unsigned char third = bytes[i++];
+      const unsigned char fourth = bytes[i++];
+      const bool second_ok =
+          first == 0xf0 ? second >= 0x90 && second <= 0xbf
+          : first == 0xf4 ? second >= 0x80 && second <= 0x8f
+                          : (second & 0xc0) == 0x80;
+      if (!second_ok || (third & 0xc0) != 0x80 || (fourth & 0xc0) != 0x80)
+        return false;
+      continue;
+    }
+    return false;
+  }
+  return true;
+}
 std::string text(ShinkiEmuBytes b, size_t maximum, bool empty = true) {
   if (b.len > maximum || (b.len && !b.data) || (!empty && !b.len)) invalid("Invalid UTF-8 byte span");
   if (!b.len) return {};
   if (std::memchr(b.data, 0, b.len)) invalid("Embedded NUL is not permitted");
-  PyObject *value = PyUnicode_DecodeUTF8(reinterpret_cast<const char *>(b.data), static_cast<Py_ssize_t>(b.len), "strict");
-  if (!value) { PyErr_Clear(); invalid("Invalid UTF-8 encoding"); }
-  Py_DECREF(value);
+  if (!valid_utf8(b)) invalid("Invalid UTF-8 encoding");
   return {reinterpret_cast<const char *>(b.data), b.len};
 }
 fs::path canonical_directory(const std::string &value) {
